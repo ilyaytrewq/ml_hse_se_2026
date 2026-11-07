@@ -1,7 +1,7 @@
 # Wine Quality — демо-приложение сомелье (ДЗ-3, часть 4)
 #
-# Модель здесь НЕ обучается: приложение загружает пайплайн (StandardScaler + LogisticRegression),
-# порог и тестовую выборку, сохранённые ноутбуком (model.joblib, config.json, test.csv).
+# Модель здесь НЕ обучается: приложение загружает итоговый пайплайн из ноутбука (разделы 3.5–3.6:
+# преобразования признаков + LogisticRegression), порог и тестовую выборку (model.joblib, config.json, test.csv).
 #
 # 4.5. Ответ на вопрос о кэшировании:
 # - Для модели используется st.cache_resource: модель — единственный «ресурс» (тяжёлый неизменяемый
@@ -26,6 +26,18 @@ import streamlit as st
 from sklearn import metrics
 
 BASE = Path(__file__).parent
+
+
+def add_log1p(Xd, cols=()):
+    """log1p-преобразование части признаков — та же функция, что в ноутбуке (3.5).
+
+    FunctionTransformer при сохранении модели держит только ссылку на имя функции
+    (__main__.add_log1p), поэтому в приложении должна быть ровно такая же функция.
+    """
+    Xd = Xd.copy()
+    for c in cols:
+        Xd[c] = np.log1p(Xd[c])
+    return Xd
 
 
 @st.cache_resource
@@ -185,18 +197,19 @@ with tab3:
 # ========================== 4.4. Что выучила модель ==========================
 with tab4:
     st.header('Что выучила модель')
-    st.caption('Коэффициенты логистической регрессии после масштабирования признаков: '
-               'вклад одного стандартного отклонения признака в log-odds «хорошего» вина.')
+    st.caption('Коэффициенты итоговой модели: в её признаки входят и сами показатели, и их '
+               'парные произведения (после преобразований пайплайна); столбик — вклад признака '
+               'в log-odds «хорошего» вина.')
 
     coefs = model[-1].coef_[0]
     order = np.argsort(coefs)
-    names = np.array(FEATURES)[order]
+    names = np.array([n.replace(' ', '×') for n in model[:-1].get_feature_names_out()])[order]
     vals = coefs[order]
 
-    fig_c, ax = plt.subplots(figsize=(8, 5))
+    fig_c, ax = plt.subplots(figsize=(8, max(5, 0.16 * len(vals))))
     ax.barh(names, vals, color=['#c0392b' if v < 0 else '#27885f' for v in vals])
     ax.axvline(0, c='k', lw=0.8)
-    ax.set(title='Коэффициенты логистической регрессии (признаки стандартизованы)',
+    ax.set(title='Коэффициенты итоговой модели',
            xlabel='вклад в log-odds «хорошего» вина')
     st.pyplot(fig_c)
 
