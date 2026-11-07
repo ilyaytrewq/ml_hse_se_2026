@@ -13,6 +13,9 @@
 # - Если вызвать joblib.load без декоратора, модель будет перечитываться с диска при каждом
 #   действии пользователя (каждое движение слайдера перезапускает app.py сверху вниз) —
 #   лишние десятки-сотни миллисекунд на каждый сдвиг.
+# - Ключ каждого кэша включает метку времени файла-артефакта (mtime): после замены
+#   model.joblib/config.json/test.csv кэш пересчитывается сам, без ручного Clear cache.
+#   Это важно при обновлении модели из ноутбука: процесс Streamlit живёт между пушами.
 # - Путь к файлам строится от папки app.py: Path(__file__).parent, а не от текущей директории.
 
 import json
@@ -40,32 +43,45 @@ def add_log1p(Xd, cols=()):
     return Xd
 
 
-@st.cache_resource
-def load_model():
-    """Модель — единственный ресурс на весь процесс (см. комментарий про 4.5 выше)."""
+def file_stamp(name):
+    """Метка времени файла-артефакта — входит в ключ кэша.
+
+    Если model.joblib/config.json/test.csv заменили (перегенерировал ноутбук), кэш сам
+    пересчитается: ключ стал другим. Без этого st.cache_resource/cache_data держали бы
+    старую модель в живом процессе до ручного Clear cache / перезапуска приложения.
+    """
+    return (BASE / name).stat().st_mtime_ns
+
+
+@st.cache_resource(max_entries=1)
+def load_model(stamp):
+    """Модель — единственный ресурс на весь процесс (см. комментарий про 4.5 выше).
+
+    stamp — метка model.joblib: новый файл => новый ключ => модель перечитывается.
+    """
     return joblib.load(BASE / 'model.joblib')
 
 
 @st.cache_data
-def load_config():
+def load_config(stamp):
     return json.loads((BASE / 'config.json').read_text())
 
 
 @st.cache_data
-def load_test():
+def load_test(stamp):
     return pd.read_csv(BASE / 'test.csv')
 
 
 @st.cache_data
-def test_proba(_model, X):
-    """Вероятности класса 1 на тестовой выборке: считаются один раз (аргумент _model не хешируется)."""
+def test_proba(_model, X, stamp):
+    """Вероятности класса 1 на тесте: кэш по (содержимому X, stamp модели); сам _model не хешируется."""
     return _model.predict_proba(X)[:, 1]
 
 
 st.set_page_config(page_title='Wine Quality — сомелье', page_icon='🍷', layout='wide')
 
-model = load_model()
-DEFAULT_THR = float(load_config()['threshold'])
+model = load_model(file_stamp('model.joblib'))
+DEFAULT_THR = float(load_config(file_stamp('config.json'))['threshold'])
 FEATURES = list(model.feature_names_in_)
 NUM_FEATURES = [c for c in FEATURES if c != 'is_red']
 
@@ -77,9 +93,9 @@ st.sidebar.caption(f'Вино считается «хорошим», если P(
                    f'Порог по умолчанию ({DEFAULT_THR:.3f}) подобран на валидации в ноутбуке:\n'
                    f'максимальный precision при recall ≥ 0.7.')
 
-test_df = load_test()
+test_df = load_test(file_stamp('test.csv'))
 y_test = test_df['target']
-proba = test_proba(model, test_df[FEATURES])
+proba = test_proba(model, test_df[FEATURES], file_stamp('model.joblib'))
 
 tab1, tab2, tab3, tab4 = st.tabs(
     ['🍷 Одно вино', '📊 Модельные метрики', '📦 Пакетное предсказание', '🧠 Что выучила модель'])
