@@ -88,8 +88,8 @@ NUM_FEATURES = [c for c in FEATURES if c != 'is_red']
 # --- сайдбар: порог (по умолчанию — из config.json; общий для вкладок 2 и 3) ---
 st.sidebar.header('Порог модели')
 thr = st.sidebar.slider('Порог «хорошего» вина', 0.0, 1.0, DEFAULT_THR, 0.01,
-                        key='threshold_slider', format='%.2f')
-st.sidebar.caption(f'Вино считается «хорошим», если P(хорошее) ≥ {thr:.2f}.\n\n'
+                        key='threshold_slider', format='%.3f')
+st.sidebar.caption(f'Вино считается «хорошим», если P(хорошее) ≥ {thr:.3f}.\n\n'
                    f'Порог по умолчанию ({DEFAULT_THR:.3f}) подобран на валидации в ноутбуке:\n'
                    f'максимальный precision при recall ≥ 0.7.')
 
@@ -124,9 +124,9 @@ with tab1:
     c1, c2, c3 = st.columns(3)
     c1.metric('Вероятность «хорошего»', f'{p1:.1%}',
               delta='выше порога' if p1 >= thr else 'ниже порога')
-    c2.metric(f'Решение при пороге {thr:.2f}', '✅ в подборку' if p1 >= thr else '❌ не в подборку')
+    c2.metric(f'Решение при пороге {thr:.3f}', '✅ в подборку' if p1 >= thr else '❌ не в подборку')
     c3.metric('Тип вина', 'красное' if is_red else 'белое')
-    st.progress(min(p1, 1.0), text=f'P(хорошее) = {p1:.3f} (порог {thr:.2f})')
+    st.progress(min(p1, 1.0), text=f'P(хорошее) = {p1:.3f} (порог {thr:.3f})')
 
 # ==================== 4.2. Интерактивная визуализация метрик ====================
 with tab2:
@@ -177,7 +177,7 @@ with tab2:
         cc2.pyplot(fig_pr)
 
     st.info(
-        f'**Подсказка сомелье.** При текущем пороге {thr:.2f} в подборку попадает {pred.mean():.1%} всех вин, '
+        f'**Подсказка сомелье.** При текущем пороге {thr:.3f} в подборку попадает {pred.mean():.1%} всех вин, '
         f'из них «хороших» — {metrics.precision_score(y_test, pred, zero_division=0):.1%}. '
         f'**Порог больше** — модель требовательнее: подборка меньше и чище (precision растёт), '
         f'но больше хороших вин остаётся вне её (recall падает). '
@@ -189,7 +189,7 @@ with tab2:
 with tab3:
     st.header('Пакетное предсказание')
     st.caption(f'Загрузите CSV со столбцами: {", ".join(FEATURES)}. '
-               f'Используется порог из сайдбара: {thr:.2f}.')
+               f'Используется порог из сайдбара: {thr:.3f}.')
 
     uploaded = st.file_uploader('CSV-файл с признаками вин (без столбца target)', type='csv')
     if uploaded is not None:
@@ -203,7 +203,7 @@ with tab3:
             out = batch.copy()
             out['p_good'] = np.round(probs, 4)
             out['решение'] = np.where(probs >= thr, 'в подборку', 'не в подборку')
-            st.success(f'Готово: {len(out)} вин, порог {thr:.2f}, '
+            st.success(f'Готово: {len(out)} вин, порог {thr:.3f}, '
                        f'в подборку: {(probs >= thr).sum()}.')
             st.dataframe(out)
             st.download_button('⬇️ Скачать предсказания (CSV)',
